@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Leaflet Map - ABC & Wells</title>
+    <title>خريطة Leaflet</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+    
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        #map { height: 100vh; width: 100%; }
+        #map { height: 100vh; width: 100vw; }
     </style>
 </head>
 <body>
@@ -19,49 +19,50 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-    // إنشاء الخريطة وتحديد مركزها
-    var map = L.map('map').setView([32.0, 35.0], 10); // يمكنك تعديل الإحداثيات لاحقاً
+    // إنشاء الخريطة
+    const map = L.map('map').setView([32.0, 35.0], 10);
 
-    // خريطة الأساس من OpenStreetMap
+    // طبقة الأساس
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19
     }).addTo(map);
 
-    // تحميل ملف ABC.geojson
-    fetch('https://raw.githubusercontent.com/sallyaid/GIS-Data/main/ABC.geojson')
+    // تحميل ملف ABC.geojson محليًا
+    fetch('ABC.geojson')
         .then(response => response.json())
         .then(data => {
-            var abcLayer = L.geoJSON(data, {
-                onEachFeature: function (feature, layer) {
-                    layer.bindPopup("عنصر من طبقة ABC");
+            const abcLayer = L.geoJSON(data, {
+                onEachFeature: function(feature, layer) {
+                    layer.bindPopup("عنصر من ABC");
                 }
             }).addTo(map);
-
-            map.fitBounds(abcLayer.getBounds()); // تكبير الخريطة تلقائياً
+            map.fitBounds(abcLayer.getBounds());
         })
-        .catch(error => console.error('فشل تحميل ABC.geojson:', error));
+        .catch(err => console.error("فشل في تحميل ABC.geojson:", err));
 
-    // تحميل ملف Wells.json
-    fetch('https://raw.githubusercontent.com/sallyaid/GIS-Data/main/Wells.json')
+    // تحميل ملف Wells.json محليًا
+    fetch('Wells.json')
         .then(response => response.json())
         .then(data => {
             L.geoJSON(data, {
+                onEachFeature: function(feature, layer) {
+                    const name = feature.properties?.name || "بئر بدون اسم";
+                    layer.bindPopup(name);
+                },
                 pointToLayer: function(feature, latlng) {
                     return L.circleMarker(latlng, {
                         radius: 6,
-                        color: 'blue',
-                        fillColor: 'lightblue',
-                        fillOpacity: 0.7
+                        fillColor: "blue",
+                        color: "#000",
+                        weight: 1,
+                        opacity: 1,
+                        fillOpacity: 0.8
                     });
-                },
-                onEachFeature: function (feature, layer) {
-                    let name = feature.properties?.name || 'بئر بدون اسم';
-                    layer.bindPopup("بئر: " + name);
                 }
             }).addTo(map);
         })
-        .catch(error => console.error('فشل تحميل Wells.json:', error));
+        .catch(err => console.error("فشل في تحميل Wells.json:", err));
 </script>
 
 </body>
