@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>خريطة Leaflet - فلترة الينابيع حسب المنطقة</title>
+    <title>فلترة الينابيع حسب المنطقة</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+    
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <!-- Turf.js -->
@@ -15,6 +15,7 @@
         #controls {
             padding: 10px;
             background: #f9f9f9;
+            font-family: Arial;
         }
     </style>
 </head>
@@ -28,7 +29,7 @@
         <option value="B">المنطقة ب</option>
         <option value="C">المنطقة ج</option>
     </select>
-    <span id="wellCount" style="margin-right: 15px; font-weight: bold;"></span>
+    <span id="wellCount" style="margin-right: 15px; font-weight: bold;">عدد الينابيع: </span>
 </div>
 
 <div id="map"></div>
@@ -37,74 +38,71 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-    const map = L.map('map').setView([32.0, 35.0], 10);
+    const map = L.map('map').setView([32.0, 35.0], 9);
 
     const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19
     }).addTo(map);
 
-    let abcLayer;
-    let wellsLayer;
-    let allWellsData = null;
-    let abcData = null; // لتخزين مضلعات المناطق
+    let abcData = null;
+    let allWells = null;
+    let wellsLayer = null;
+    let abcLayer = null;
 
-    // تحميل طبقة ABC.geojson
+    // تحميل طبقة المناطق
     fetch('ABC.geojson')
-        .then(response => response.json())
+        .then(res => res.json())
         .then(data => {
-            abcData = data; // تخزين بيانات المناطق للاستخدام لاحقًا
+            abcData = data;
             abcLayer = L.geoJSON(data, {
-                onEachFeature: function(feature, layer) {
-                    layer.bindPopup("عنصر من ABC");
-                }
+                style: { color: "blue", weight: 1 }
             }).addTo(map);
             map.fitBounds(abcLayer.getBounds());
-        })
-        .catch(err => console.error("فشل في تحميل ABC.geojson:", err));
+        });
 
-    // تحميل طبقة Wells.json
+    // تحميل طبقة الينابيع
     fetch('Wells.json')
-        .then(response => response.json())
+        .then(res => res.json())
         .then(data => {
-            allWellsData = data;
+            allWells = data;
             displayWells("all");
-        })
-        .catch(err => console.error("فشل في تحميل Wells.json:", err));
+        });
 
     function displayWells(selectedZone) {
         if (wellsLayer) {
             map.removeLayer(wellsLayer);
         }
 
-        let filteredFeatures;
+        let filtered = [];
 
         if (selectedZone === "all") {
-            filteredFeatures = allWellsData.features;
+            filtered = allWells.features;
         } else {
-            // الحصول على المضلع المطابق للمنطقة
-            const zonePolygon = abcData.features.find(f => f.properties.zone === selectedZone);
-            if (!zonePolygon) {
+            // الحصول على مضلع المنطقة المختارة
+            const selectedPolygon = abcData.features.find(f => f.properties.zone === selectedZone);
+            if (!selectedPolygon) {
                 alert("لم يتم العثور على مضلع للمنطقة المحددة.");
                 return;
             }
 
-            // تحديد الينابيع التي تقع داخل المضلع باستخدام turf.js
-            filteredFeatures = allWellsData.features.filter(well => {
-                const pt = turf.point(well.geometry.coordinates);
-                return turf.booleanPointInPolygon(pt, zonePolygon);
+            // فلترة الينابيع داخل هذا المضلع
+            filtered = allWells.features.filter(well => {
+                const point = turf.point(well.geometry.coordinates);
+                return turf.booleanPointInPolygon(point, selectedPolygon);
             });
         }
 
-        document.getElementById("wellCount").textContent = `عدد الينابيع: ${filteredFeatures.length}`;
+        // تحديث العداد
+        document.getElementById("wellCount").textContent = `عدد الينابيع: ${filtered.length}`;
 
-        // عرض الطبقة
+        // عرض الينابيع
         wellsLayer = L.geoJSON({
             type: "FeatureCollection",
-            features: filteredFeatures
+            features: filtered
         }, {
             onEachFeature: function(feature, layer) {
-                const name = feature.properties?.name || "بئر بدون اسم";
+                const name = feature.properties?.name || "بئر غير مسمى";
                 layer.bindPopup("اسم البئر: " + name);
             },
             pointToLayer: function(feature, latlng) {
