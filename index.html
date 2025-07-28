@@ -1,73 +1,84 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>تحديد الينابيع حسب المنطقة - Leaflet + Turf.js</title>
+    <title>أداة Select By Location - Leaflet + Turf</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
+
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        #map { height: 85vh; width: 100vw; }
+        #map { height: 85vh; width: 100%; }
         #controls {
             padding: 10px;
-            background: #f0f0f0;
+            background: #eee;
             font-family: Arial;
         }
         #info {
             padding: 10px;
             font-family: Arial;
-            background: #f9f9f9;
+            background: #fefefe;
         }
     </style>
 </head>
 <body>
 
 <div id="controls">
-    <label for="zoneSelect">اختر المنطقة:</label>
+    <label for="zoneSelect">اختر المنطقة (Select Polygon):</label>
     <select id="zoneSelect">
-        <option value="all">كل المناطق</option>
-        <option value="A">المنطقة أ</option>
-        <option value="B">المنطقة ب</option>
-        <option value="C">المنطقة ج</option>
+        <option value="">-- اختر --</option>
     </select>
 </div>
 
 <div id="info"></div>
 <div id="map"></div>
 
-<!-- Leaflet & Turf.js -->
+<!-- Leaflet + Turf -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
 
 <script>
     const map = L.map('map').setView([32.0, 35.0], 10);
 
-    const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
+    const baseMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
         maxZoom: 19
     }).addTo(map);
 
-    let abcData = null;
-    let wellsData = null;
-
-    let abcLayer;
-    let wellsLayer;
-    let intersectedWellsLayer;
+    let abcData, wellsData;
+    let polygonLayer, selectedPolygonLayer, selectedWellsLayer;
 
     // تحميل طبقة ABC.geojson
     fetch('ABC.geojson')
         .then(res => res.json())
         .then(data => {
             abcData = data;
-            abcLayer = L.geoJSON(data, {
-                style: { color: 'green', fillOpacity: 0.1 },
-                onEachFeature: (feature, layer) => {
-                    const z = feature.properties?.zone || '؟';
-                    layer.bindPopup(`المنطقة: ${z}`);
+
+            // إضافة الطبقة للمشاهدة
+            polygonLayer = L.geoJSON(data, {
+                style: {
+                    color: 'green',
+                    weight: 1,
+                    fillOpacity: 0.1
+                },
+                onEachFeature: function (feature, layer) {
+                    const zone = feature.properties.zone || 'Unknown';
+                    layer.bindPopup("Zone: " + zone);
                 }
             }).addTo(map);
-            map.fitBounds(abcLayer.getBounds());
+
+            map.fitBounds(polygonLayer.getBounds());
+
+            // تعبئة القائمة بالـ Zones الموجودة
+            const select = document.getElementById("zoneSelect");
+            const uniqueZones = [...new Set(data.features.map(f => f.properties.zone))];
+
+            uniqueZones.forEach(zone => {
+                const option = document.createElement("option");
+                option.value = zone;
+                option.text = "المنطقة " + zone;
+                select.appendChild(option);
+            });
         });
 
     // تحميل طبقة Wells.json
@@ -75,89 +86,58 @@
         .then(res => res.json())
         .then(data => {
             wellsData = data;
-            wellsLayer = L.geoJSON(data, {
-                pointToLayer: (feature, latlng) => {
-                    return L.circleMarker(latlng, {
-                        radius: 5,
-                        color: 'blue',
-                        fillColor: 'lightblue',
-                        fillOpacity: 0.8
-                    });
-                },
-                onEachFeature: (feature, layer) => {
-                    const name = feature.properties?.name || 'بئر';
-                    layer.bindPopup(`اسم البئر: ${name}`);
-                }
-            }).addTo(map);
         });
 
-    // عند تغيير المنطقة
-    document.getElementById("zoneSelect").addEventListener("change", () => {
-        const selectedZone = document.getElementById("zoneSelect").value;
+    // عند اختيار منطقة من القائمة
+    document.getElementById("zoneSelect").addEventListener("change", function () {
+        const selectedZone = this.value;
 
         // إزالة الطبقات السابقة
-        if (intersectedWellsLayer) {
-            map.removeLayer(intersectedWellsLayer);
-        }
+        if (selectedPolygonLayer) map.removeLayer(selectedPolygonLayer);
+        if (selectedWellsLayer) map.removeLayer(selectedWellsLayer);
 
-        if (selectedZone === "all") {
-            wellsLayer.addTo(map);
+        if (!selectedZone) {
             document.getElementById("info").innerHTML = "";
             return;
         }
 
-        // إخفاء كل الينابيع مؤقتاً
-        map.removeLayer(wellsLayer);
-
-        // تحديد مضلعات المنطقة المطلوبة
+        // استخراج المضلع/المضلعات المختارة
         const selectedPolygons = abcData.features.filter(f => f.properties.zone === selectedZone);
 
-        if (selectedPolygons.length === 0) {
-            document.getElementById("info").innerHTML = "لا توجد مضلعات لهذه المنطقة.";
-            return;
-        }
-
-        const selectedPolygonCollection = {
+        selectedPolygonLayer = L.geoJSON({
             type: "FeatureCollection",
             features: selectedPolygons
-        };
-
-        // إيجاد الينابيع التي تتقاطع مع المضلعات
-        const intersected = wellsData.features.filter(well => {
-            return selectedPolygons.some(poly =>
-                turf.booleanPointInPolygon(well, poly)
-            );
-        });
-
-        // عرض النتائج
-        intersectedWellsLayer = L.geoJSON({
-            type: "FeatureCollection",
-            features: intersected
         }, {
-            pointToLayer: (feature, latlng) => {
+            style: { color: "red", weight: 2, fillOpacity: 0.2 }
+        }).addTo(map);
+
+        // إجراء Select By Location باستخدام turf.booleanPointInPolygon
+        const intersectedWells = wellsData.features.filter(well =>
+            selectedPolygons.some(poly => turf.booleanPointInPolygon(well, poly))
+        );
+
+        selectedWellsLayer = L.geoJSON({
+            type: "FeatureCollection",
+            features: intersectedWells
+        }, {
+            pointToLayer: function (feature, latlng) {
                 return L.circleMarker(latlng, {
                     radius: 6,
-                    color: "red",
-                    fillColor: "pink",
+                    color: "blue",
+                    fillColor: "lightblue",
                     fillOpacity: 0.8
                 });
             },
-            onEachFeature: (feature, layer) => {
-                const name = feature.properties?.name || 'بئر';
-                layer.bindPopup(`اسم البئر: ${name}`);
+            onEachFeature: function (feature, layer) {
+                const name = feature.properties.name || 'بئر بدون اسم';
+                layer.bindPopup(name);
             }
         }).addTo(map);
 
-        // إظهار عدد الينابيع وتفاصيلها
-        const infoDiv = document.getElementById("info");
-        let html = `<strong>عدد الينابيع في المنطقة ${selectedZone}: ${intersected.length}</strong><br>`;
-        html += "<ul>";
-        intersected.forEach(w => {
-            const n = w.properties?.name || "بئر بدون اسم";
-            html += `<li>${n}</li>`;
-        });
-        html += "</ul>";
-        infoDiv.innerHTML = html;
+        // عرض المعلومات
+        const infoBox = document.getElementById("info");
+        infoBox.innerHTML = `<b>عدد الينابيع داخل المنطقة ${selectedZone}:</b> ${intersectedWells.length}<br><ul>` +
+            intersectedWells.map(f => `<li>${f.properties.name || 'بئر'}</li>`).join('') + "</ul>";
     });
 </script>
 
