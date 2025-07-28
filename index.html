@@ -1,134 +1,110 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>أداة Select By Location - Leaflet + Turf</title>
+    <title>خريطة Leaflet - فلترة الينابيع حسب المنطقة</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        #map { height: 85vh; width: 100%; }
+        #map { height: 90vh; width: 100vw; }
         #controls {
             padding: 10px;
-            background: #eee;
-            font-family: Arial;
-        }
-        #info {
-            padding: 10px;
-            font-family: Arial;
-            background: #fefefe;
+            background: #f9f9f9;
         }
     </style>
 </head>
 <body>
 
 <div id="controls">
-    <label for="zoneSelect">اختر المنطقة (Select Polygon):</label>
+    <label for="zoneSelect">اختر المنطقة:</label>
     <select id="zoneSelect">
-        <option value="">-- اختر --</option>
+        <option value="all">كل المناطق</option>
         <option value="A">المنطقة أ</option>
         <option value="B">المنطقة ب</option>
         <option value="C">المنطقة ج</option>
     </select>
 </div>
 
-<div id="info"></div>
 <div id="map"></div>
 
-<!-- Leaflet + Turf -->
+<!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
 
 <script>
     const map = L.map('map').setView([32.0, 35.0], 10);
 
-    const baseMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap',
+    const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
         maxZoom: 19
     }).addTo(map);
 
-    let abcData, wellsData;
-    let polygonLayer, selectedPolygonLayer, selectedWellsLayer;
+    let abcLayer;
+    let wellsLayer;
+    let allWellsData = null;
 
     // تحميل طبقة ABC.geojson
     fetch('ABC.geojson')
-        .then(res => res.json())
+        .then(response => response.json())
         .then(data => {
-            abcData = data;
-
-            polygonLayer = L.geoJSON(data, {
-                style: {
-                    color: 'green',
-                    weight: 1,
-                    fillOpacity: 0.1
-                },
-                onEachFeature: function (feature, layer) {
-                    const zone = feature.properties.zone || '؟';
-                    layer.bindPopup("Zone: " + zone);
+            abcLayer = L.geoJSON(data, {
+                onEachFeature: function(feature, layer) {
+                    layer.bindPopup("عنصر من ABC");
                 }
             }).addTo(map);
+            map.fitBounds(abcLayer.getBounds());
+        })
+        .catch(err => console.error("فشل في تحميل ABC.geojson:", err));
 
-            map.fitBounds(polygonLayer.getBounds());
-        });
-
-    // تحميل طبقة Wells.json
+    // تحميل طبقة Wells.json وتخزينها للفلترة
     fetch('Wells.json')
-        .then(res => res.json())
+        .then(response => response.json())
         .then(data => {
-            wellsData = data;
-        });
+            allWellsData = data;
+            displayWells("all"); // عرض كل الينابيع عند البداية
+        })
+        .catch(err => console.error("فشل في تحميل Wells.json:", err));
 
-    // عند اختيار منطقة من القائمة
-    document.getElementById("zoneSelect").addEventListener("change", function () {
-        const selectedZone = this.value;
-
-        // إزالة الطبقات السابقة
-        if (selectedPolygonLayer) map.removeLayer(selectedPolygonLayer);
-        if (selectedWellsLayer) map.removeLayer(selectedWellsLayer);
-
-        if (!selectedZone) {
-            document.getElementById("info").innerHTML = "";
-            return;
+    // دالة لعرض الينابيع بناء على المنطقة المحددة
+    function displayWells(zone) {
+        // حذف الطبقة السابقة إن وُجدت
+        if (wellsLayer) {
+            map.removeLayer(wellsLayer);
         }
 
-        // استخراج المضلعات التي zone=A/B/C
-        const selectedPolygons = abcData.features.filter(f => f.properties.zone === selectedZone);
-
-        selectedPolygonLayer = L.geoJSON({
+        // فلترة البيانات حسب المنطقة
+        const filtered = {
             type: "FeatureCollection",
-            features: selectedPolygons
-        }, {
-            style: { color: "red", weight: 2, fillOpacity: 0.2 }
-        }).addTo(map);
+            features: allWellsData.features.filter(feature => {
+                if (zone === "all") return true;
+                return feature.properties.zone === zone;
+            })
+        };
 
-        // إيجاد الينابيع داخل هذه المضلعات
-        const intersectedWells = wellsData.features.filter(well =>
-            selectedPolygons.some(poly => turf.booleanPointInPolygon(well, poly))
-        );
-
-        selectedWellsLayer = L.geoJSON({
-            type: "FeatureCollection",
-            features: intersectedWells
-        }, {
-            pointToLayer: function (feature, latlng) {
+        // عرض الطبقة الجديدة
+        wellsLayer = L.geoJSON(filtered, {
+            onEachFeature: function(feature, layer) {
+                const name = feature.properties?.name || "بئر بدون اسم";
+                layer.bindPopup("اسم البئر: " + name);
+            },
+            pointToLayer: function(feature, latlng) {
                 return L.circleMarker(latlng, {
                     radius: 6,
-                    color: "blue",
-                    fillColor: "lightblue",
+                    fillColor: "blue",
+                    color: "#000",
+                    weight: 1,
+                    opacity: 1,
                     fillOpacity: 0.8
                 });
-            },
-            onEachFeature: function (feature, layer) {
-                const name = feature.properties.name || 'بئر بدون اسم';
-                layer.bindPopup(name);
             }
         }).addTo(map);
+    }
 
-        // عرض عدد وأسماء الينابيع
-        const infoBox = document.getElementById("info");
-        infoBox.innerHTML = `<b>عدد الينابيع داخل المنطقة ${selectedZone}:</b> ${intersectedWells.length}<br><ul>` +
-            intersectedWells.map(f => `<li>${f.properties.name || 'بئر'}</li>`).join('') + "</ul>";
+    // التعامل مع تغيير المنطقة من القائمة
+    document.getElementById("zoneSelect").addEventListener("change", function() {
+        const selectedZone = this.value;
+        displayWells(selectedZone);
     });
 </script>
 
