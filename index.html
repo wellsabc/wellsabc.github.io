@@ -1,17 +1,31 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>خريطة Leaflet</title>
+    <title>خريطة Leaflet - فلترة الينابيع حسب المنطقة</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
+
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        #map { height: 100vh; width: 100vw; }
+        #map { height: 90vh; width: 100vw; }
+        #controls {
+            padding: 10px;
+            background: #f9f9f9;
+        }
     </style>
 </head>
 <body>
+
+<div id="controls">
+    <label for="zoneSelect">اختر المنطقة:</label>
+    <select id="zoneSelect">
+        <option value="all">كل المناطق</option>
+        <option value="A">المنطقة أ</option>
+        <option value="B">المنطقة ب</option>
+        <option value="C">المنطقة ج</option>
+    </select>
+</div>
 
 <div id="map"></div>
 
@@ -19,20 +33,22 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-    // إنشاء الخريطة
     const map = L.map('map').setView([32.0, 35.0], 10);
 
-    // طبقة الأساس
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19
     }).addTo(map);
 
-    // تحميل ملف ABC.geojson محليًا
+    let abcLayer;
+    let wellsLayer;
+    let allWellsData = null;
+
+    // تحميل طبقة ABC.geojson
     fetch('ABC.geojson')
         .then(response => response.json())
         .then(data => {
-            const abcLayer = L.geoJSON(data, {
+            abcLayer = L.geoJSON(data, {
                 onEachFeature: function(feature, layer) {
                     layer.bindPopup("عنصر من ABC");
                 }
@@ -41,28 +57,55 @@
         })
         .catch(err => console.error("فشل في تحميل ABC.geojson:", err));
 
-    // تحميل ملف Wells.json محليًا
+    // تحميل طبقة Wells.json وتخزينها للفلترة
     fetch('Wells.json')
         .then(response => response.json())
         .then(data => {
-            L.geoJSON(data, {
-                onEachFeature: function(feature, layer) {
-                    const name = feature.properties?.name || "بئر بدون اسم";
-                    layer.bindPopup(name);
-                },
-                pointToLayer: function(feature, latlng) {
-                    return L.circleMarker(latlng, {
-                        radius: 6,
-                        fillColor: "blue",
-                        color: "#000",
-                        weight: 1,
-                        opacity: 1,
-                        fillOpacity: 0.8
-                    });
-                }
-            }).addTo(map);
+            allWellsData = data;
+            displayWells("all"); // عرض كل الينابيع عند البداية
         })
         .catch(err => console.error("فشل في تحميل Wells.json:", err));
+
+    // دالة لعرض الينابيع بناء على المنطقة المحددة
+    function displayWells(zone) {
+        // حذف الطبقة السابقة إن وُجدت
+        if (wellsLayer) {
+            map.removeLayer(wellsLayer);
+        }
+
+        // فلترة البيانات حسب المنطقة
+        const filtered = {
+            type: "FeatureCollection",
+            features: allWellsData.features.filter(feature => {
+                if (zone === "all") return true;
+                return feature.properties.zone === zone;
+            })
+        };
+
+        // عرض الطبقة الجديدة
+        wellsLayer = L.geoJSON(filtered, {
+            onEachFeature: function(feature, layer) {
+                const name = feature.properties?.name || "بئر بدون اسم";
+                layer.bindPopup("اسم البئر: " + name);
+            },
+            pointToLayer: function(feature, latlng) {
+                return L.circleMarker(latlng, {
+                    radius: 6,
+                    fillColor: "blue",
+                    color: "#000",
+                    weight: 1,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                });
+            }
+        }).addTo(map);
+    }
+
+    // التعامل مع تغيير المنطقة من القائمة
+    document.getElementById("zoneSelect").addEventListener("change", function() {
+        const selectedZone = this.value;
+        displayWells(selectedZone);
+    });
 </script>
 
 </body>
