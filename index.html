@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Leaflet Map - Load GeoJSON from GitHub</title>
+    <title>Leaflet Map - ABC & Wells</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -20,7 +20,7 @@
 
 <script>
     // إنشاء الخريطة وتحديد مركزها
-    var map = L.map('map').setView([32.0, 35.0], 10); // غيّر الإحداثيات حسب موقعك
+    var map = L.map('map').setView([32.0, 35.0], 10); // يمكنك تعديل الإحداثيات لاحقاً
 
     // خريطة الأساس من OpenStreetMap
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -28,30 +28,25 @@
         maxZoom: 19
     }).addTo(map);
 
-    // تحميل ملف ABC.geojson من GitHub
-    fetch('https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/ABC.geojson')
+    // تحميل ملف ABC.geojson
+    fetch('https://raw.githubusercontent.com/sallyaid/GIS-Data/main/ABC.geojson')
         .then(response => response.json())
         .then(data => {
             var abcLayer = L.geoJSON(data, {
                 onEachFeature: function (feature, layer) {
-                    layer.bindPopup("ABC Feature");
+                    layer.bindPopup("عنصر من طبقة ABC");
                 }
             }).addTo(map);
 
-            // تكبير الخريطة لتناسب حدود البيانات
-            map.fitBounds(abcLayer.getBounds());
+            map.fitBounds(abcLayer.getBounds()); // تكبير الخريطة تلقائياً
         })
-        .catch(error => console.error('خطأ في تحميل ABC.geojson:', error));
+        .catch(error => console.error('فشل تحميل ABC.geojson:', error));
 
-    // تحميل ملف Wells.json من GitHub
-    fetch('https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/Wells.json')
+    // تحميل ملف Wells.json
+    fetch('https://raw.githubusercontent.com/sallyaid/GIS-Data/main/Wells.json')
         .then(response => response.json())
         .then(data => {
             L.geoJSON(data, {
-                onEachFeature: function (feature, layer) {
-                    let name = feature.properties?.name || 'بدون اسم';
-                    layer.bindPopup("بئر: " + name);
-                },
                 pointToLayer: function(feature, latlng) {
                     return L.circleMarker(latlng, {
                         radius: 6,
@@ -59,10 +54,14 @@
                         fillColor: 'lightblue',
                         fillOpacity: 0.7
                     });
+                },
+                onEachFeature: function (feature, layer) {
+                    let name = feature.properties?.name || 'بئر بدون اسم';
+                    layer.bindPopup("بئر: " + name);
                 }
             }).addTo(map);
         })
-        .catch(error => console.error('خطأ في تحميل Wells.json:', error));
+        .catch(error => console.error('فشل تحميل Wells.json:', error));
 </script>
 
 </body>
