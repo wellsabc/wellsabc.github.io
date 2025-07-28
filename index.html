@@ -4,12 +4,9 @@
     <title>فلترة الينابيع حسب المنطقة</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
+
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Turf.js -->
-    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-
     <style>
         #map { height: 90vh; width: 100vw; }
         #controls {
@@ -45,21 +42,8 @@
         maxZoom: 19
     }).addTo(map);
 
-    let abcData = null;
-    let allWells = null;
     let wellsLayer = null;
-    let abcLayer = null;
-
-    // تحميل طبقة المناطق
-    fetch('ABC.geojson')
-        .then(res => res.json())
-        .then(data => {
-            abcData = data;
-            abcLayer = L.geoJSON(data, {
-                style: { color: "blue", weight: 1 }
-            }).addTo(map);
-            map.fitBounds(abcLayer.getBounds());
-        });
+    let allWells = null;
 
     // تحميل طبقة الينابيع
     fetch('Wells.json')
@@ -79,24 +63,11 @@
         if (selectedZone === "all") {
             filtered = allWells.features;
         } else {
-            // الحصول على مضلع المنطقة المختارة
-            const selectedPolygon = abcData.features.find(f => f.properties.zone === selectedZone);
-            if (!selectedPolygon) {
-                alert("لم يتم العثور على مضلع للمنطقة المحددة.");
-                return;
-            }
-
-            // فلترة الينابيع داخل هذا المضلع
-            filtered = allWells.features.filter(well => {
-                const point = turf.point(well.geometry.coordinates);
-                return turf.booleanPointInPolygon(point, selectedPolygon);
-            });
+            filtered = allWells.features.filter(f => f.properties.zone === selectedZone);
         }
 
-        // تحديث العداد
         document.getElementById("wellCount").textContent = `عدد الينابيع: ${filtered.length}`;
 
-        // عرض الينابيع
         wellsLayer = L.geoJSON({
             type: "FeatureCollection",
             features: filtered
