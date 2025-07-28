@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>خريطة Leaflet - فلترة الينابيع حسب الموقع داخل المنطقة</title>
+    <title>خريطة Leaflet - فلترة الينابيع حسب المنطقة</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -32,9 +32,6 @@
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<!-- Turf.js لإجراء العمليات المكانية -->
-<script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
-
 <script>
     const map = L.map('map').setView([32.0, 35.0], 10);
 
@@ -53,51 +50,39 @@
         .then(data => {
             abcLayer = L.geoJSON(data, {
                 onEachFeature: function(feature, layer) {
-                    const z = feature.properties?.zone || "منطقة غير معروفة";
-                    layer.bindPopup("المنطقة: " + z);
+                    layer.bindPopup("عنصر من ABC");
                 }
             }).addTo(map);
             map.fitBounds(abcLayer.getBounds());
         })
         .catch(err => console.error("فشل في تحميل ABC.geojson:", err));
 
-    // تحميل طبقة Wells.json
+    // تحميل طبقة Wells.json وتخزينها للفلترة
     fetch('Wells.json')
         .then(response => response.json())
         .then(data => {
             allWellsData = data;
-            displayWells("all");
+            displayWells("all"); // عرض كل الينابيع عند البداية
         })
         .catch(err => console.error("فشل في تحميل Wells.json:", err));
 
-    // دالة لعرض الينابيع بناءً على الموقع داخل مضلع المنطقة
+    // دالة لعرض الينابيع بناء على المنطقة المحددة
     function displayWells(zone) {
+        // حذف الطبقة السابقة إن وُجدت
         if (wellsLayer) {
             map.removeLayer(wellsLayer);
         }
 
-        if (!abcLayer || !allWellsData) return;
-
-        let selectedPolygon = null;
-
-        if (zone !== "all") {
-            abcLayer.eachLayer(layer => {
-                if (layer.feature?.properties?.zone === zone) {
-                    selectedPolygon = layer.feature;
-                }
-            });
-        }
-
+        // فلترة البيانات حسب المنطقة
         const filtered = {
             type: "FeatureCollection",
             features: allWellsData.features.filter(feature => {
                 if (zone === "all") return true;
-
-                const pt = turf.point(feature.geometry.coordinates);
-                return selectedPolygon && turf.booleanPointInPolygon(pt, selectedPolygon);
+                return feature.properties.zone === zone;
             })
         };
 
+        // عرض الطبقة الجديدة
         wellsLayer = L.geoJSON(filtered, {
             onEachFeature: function(feature, layer) {
                 const name = feature.properties?.name || "بئر بدون اسم";
