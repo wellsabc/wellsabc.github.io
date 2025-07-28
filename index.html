@@ -35,16 +35,21 @@
 <script>
     const map = L.map('map').setView([32.0, 35.0], 10);
 
+    // طبقة الأساس
     const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19
     }).addTo(map);
 
+    // كائن لحفظ طبقات التحكم
+    const overlays = {};
+    const baseMaps = { "خريطة الأساس": baseLayer };
+
     let abcLayer;
     let wellsLayer;
     let allWellsData = null;
 
-    // تحميل طبقة ABC.geojson
+    // تحميل طبقة المناطق ABC.geojson
     fetch('ABC.geojson')
         .then(response => response.json())
         .then(data => {
@@ -53,11 +58,18 @@
                     layer.bindPopup("عنصر من ABC");
                 }
             }).addTo(map);
+
+            // أضف طبقة المناطق إلى أدوات التحكم
+            overlays["المناطق (ABC)"] = abcLayer;
+
             map.fitBounds(abcLayer.getBounds());
+
+            // أضف أداة التحكم بالطبقات
+            L.control.layers(baseMaps, overlays).addTo(map);
         })
         .catch(err => console.error("فشل في تحميل ABC.geojson:", err));
 
-    // تحميل طبقة Wells.json وتخزينها للفلترة
+    // تحميل طبقة الينابيع
     fetch('Wells.json')
         .then(response => response.json())
         .then(data => {
@@ -66,14 +78,15 @@
         })
         .catch(err => console.error("فشل في تحميل Wells.json:", err));
 
-    // دالة لعرض الينابيع بناء على المنطقة المحددة
+    // دالة عرض الينابيع حسب المنطقة
     function displayWells(zone) {
-        // حذف الطبقة السابقة إن وُجدت
+        // إزالة الطبقة القديمة إن وُجدت
         if (wellsLayer) {
             map.removeLayer(wellsLayer);
+            delete overlays["الينابيع"];
         }
 
-        // فلترة البيانات حسب المنطقة
+        // فلترة حسب المنطقة
         const filtered = {
             type: "FeatureCollection",
             features: allWellsData.features.filter(feature => {
@@ -82,7 +95,7 @@
             })
         };
 
-        // عرض الطبقة الجديدة
+        // إنشاء الطبقة الجديدة
         wellsLayer = L.geoJSON(filtered, {
             onEachFeature: function(feature, layer) {
                 const name = feature.properties?.name || "بئر بدون اسم";
@@ -99,9 +112,15 @@
                 });
             }
         }).addTo(map);
+
+        // أضف طبقة الينابيع إلى أدوات التحكم
+        overlays["الينابيع"] = wellsLayer;
+
+        // إعادة إنشاء أداة التحكم لتحديث العرض
+        L.control.layers(baseMaps, overlays).addTo(map);
     }
 
-    // التعامل مع تغيير المنطقة من القائمة
+    // عند تغيير الاختيار من القائمة
     document.getElementById("zoneSelect").addEventListener("change", function() {
         const selectedZone = this.value;
         displayWells(selectedZone);
