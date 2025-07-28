@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>خريطة Leaflet - فلترة الينابيع حسب المنطقة</title>
+    <title>خريطة Leaflet - فلترة الينابيع حسب الموقع داخل المنطقة</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -12,22 +12,6 @@
         #controls {
             padding: 10px;
             background: #f9f9f9;
-        }
-        #info-panel {
-            position: absolute;
-            top: 100px;
-            right: 10px;
-            z-index: 1000;
-            background: white;
-            padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
-            max-width: 250px;
-        }
-        .highlight {
-            fillColor: 'red';
-            color: 'red';
-            weight: 2;
         }
     </style>
 </head>
@@ -41,20 +25,15 @@
         <option value="B">المنطقة ب</option>
         <option value="C">المنطقة ج</option>
     </select>
-    <button id="selectByLocation">تحديد الينابيع في المنطقة</button>
-    <span id="countDisplay">عدد الينابيع المحددة: 0</span>
-</div>
-
-<div id="info-panel" style="display: none;">
-    <h3>نتائج التحديد</h3>
-    <div id="selection-results"></div>
-    <button id="clear-selection">مسح التحديد</button>
 </div>
 
 <div id="map"></div>
 
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Turf.js لإجراء العمليات المكانية -->
+<script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
 
 <script>
     const map = L.map('map').setView([32.0, 35.0], 10);
@@ -67,54 +46,58 @@
     let abcLayer;
     let wellsLayer;
     let allWellsData = null;
-    let selectedWellsLayer = null;
-    let selectedZoneLayer = null;
 
     // تحميل طبقة ABC.geojson
     fetch('ABC.geojson')
         .then(response => response.json())
         .then(data => {
             abcLayer = L.geoJSON(data, {
-                style: {
-                    color: 'gray',
-                    weight: 2,
-                    opacity: 0.7,
-                    fillOpacity: 0.1
-                },
                 onEachFeature: function(feature, layer) {
-                    layer.bindPopup("المنطقة: " + feature.properties.name);
+                    const z = feature.properties?.zone || "منطقة غير معروفة";
+                    layer.bindPopup("المنطقة: " + z);
                 }
             }).addTo(map);
             map.fitBounds(abcLayer.getBounds());
         })
         .catch(err => console.error("فشل في تحميل ABC.geojson:", err));
 
-    // تحميل طبقة Wells.json وتخزينها للفلترة
+    // تحميل طبقة Wells.json
     fetch('Wells.json')
         .then(response => response.json())
         .then(data => {
             allWellsData = data;
-            displayWells("all"); // عرض كل الينابيع عند البداية
+            displayWells("all");
         })
         .catch(err => console.error("فشل في تحميل Wells.json:", err));
 
-    // دالة لعرض الينابيع بناء على المنطقة المحددة
+    // دالة لعرض الينابيع بناءً على الموقع داخل مضلع المنطقة
     function displayWells(zone) {
-        // حذف الطبقة السابقة إن وُجدت
         if (wellsLayer) {
             map.removeLayer(wellsLayer);
         }
 
-        // فلترة البيانات حسب المنطقة
+        if (!abcLayer || !allWellsData) return;
+
+        let selectedPolygon = null;
+
+        if (zone !== "all") {
+            abcLayer.eachLayer(layer => {
+                if (layer.feature?.properties?.zone === zone) {
+                    selectedPolygon = layer.feature;
+                }
+            });
+        }
+
         const filtered = {
             type: "FeatureCollection",
             features: allWellsData.features.filter(feature => {
                 if (zone === "all") return true;
-                return feature.properties.zone === zone;
+
+                const pt = turf.point(feature.geometry.coordinates);
+                return selectedPolygon && turf.booleanPointInPolygon(pt, selectedPolygon);
             })
         };
 
-        // عرض الطبقة الجديدة
         wellsLayer = L.geoJSON(filtered, {
             onEachFeature: function(feature, layer) {
                 const name = feature.properties?.name || "بئر بدون اسم";
@@ -133,117 +116,11 @@
         }).addTo(map);
     }
 
-    // دالة لتحديد الينابيع داخل المنطقة المحددة
-    function selectWellsInZone(zone) {
-        // إزالة التحديدات السابقة
-        clearSelection();
-        
-        // العثور على المنطقة المحددة
-        const zoneFeature = abcLayer.getLayers().find(layer => {
-            return layer.feature.properties.name === zone;
-        });
-        
-        if (!zoneFeature) {
-            alert("لم يتم العثور على المنطقة المحددة");
-            return;
-        }
-        
-        // تمييز المنطقة المحددة
-        selectedZoneLayer = zoneFeature;
-        zoneFeature.setStyle({
-            color: 'red',
-            weight: 3,
-            fillOpacity: 0.3
-        });
-        
-        // الحصول على حدود المنطقة
-        const zoneBounds = zoneFeature.getBounds();
-        
-        // فلترة الآبار الموجودة داخل المنطقة
-        const wellsInZone = {
-            type: "FeatureCollection",
-            features: allWellsData.features.filter(feature => {
-                const wellPoint = L.latLng(feature.geometry.coordinates[1], feature.geometry.coordinates[0]);
-                return zoneBounds.contains(wellPoint);
-            })
-        };
-        
-        // عرض الآبار المحددة
-        selectedWellsLayer = L.geoJSON(wellsInZone, {
-            pointToLayer: function(feature, latlng) {
-                return L.circleMarker(latlng, {
-                    radius: 8,
-                    fillColor: "red",
-                    color: "#000",
-                    weight: 2,
-                    opacity: 1,
-                    fillOpacity: 0.9
-                });
-            },
-            onEachFeature: function(feature, layer) {
-                const name = feature.properties?.name || "بئر بدون اسم";
-                layer.bindPopup(`<b>${name}</b><br>تقع داخل ${zone}`);
-            }
-        }).addTo(map);
-        
-        // عرض عدد الآبار المحددة
-        document.getElementById('countDisplay').textContent = `عدد الينابيع المحددة: ${wellsInZone.features.length}`;
-        
-        // عرض معلومات النتائج
-        const resultsDiv = document.getElementById('selection-results');
-        resultsDiv.innerHTML = `
-            <p><strong>المنطقة المحددة:</strong> ${zone}</p>
-            <p><strong>عدد الينابيع:</strong> ${wellsInZone.features.length}</p>
-            <ul>
-                ${wellsInZone.features.slice(0, 5).map(f => 
-                    `<li>${f.properties?.name || "بئر بدون اسم"}</li>`
-                ).join('')}
-                ${wellsInZone.features.length > 5 ? `<li>و ${wellsInZone.features.length - 5} أكثر...</li>` : ''}
-            </ul>
-        `;
-        
-        // إظهار لوحة المعلومات
-        document.getElementById('info-panel').style.display = 'block';
-        
-        // تكبير الخريطة لتظهر المنطقة المحددة والآبار
-        map.fitBounds(selectedZoneLayer.getBounds().pad(0.2));
-    }
-
-    // دالة لمسح التحديد
-    function clearSelection() {
-        if (selectedWellsLayer) {
-            map.removeLayer(selectedWellsLayer);
-            selectedWellsLayer = null;
-        }
-        
-        if (selectedZoneLayer) {
-            abcLayer.resetStyle(selectedZoneLayer);
-            selectedZoneLayer = null;
-        }
-        
-        document.getElementById('countDisplay').textContent = 'عدد الينابيع المحددة: 0';
-        document.getElementById('info-panel').style.display = 'none';
-    }
-
     // التعامل مع تغيير المنطقة من القائمة
     document.getElementById("zoneSelect").addEventListener("change", function() {
         const selectedZone = this.value;
         displayWells(selectedZone);
-        clearSelection();
     });
-
-    // زر تحديد الينابيع في المنطقة
-    document.getElementById("selectByLocation").addEventListener("click", function() {
-        const selectedZone = document.getElementById("zoneSelect").value;
-        if (selectedZone === "all") {
-            alert("الرجاء اختيار منطقة محددة (أ، ب، ج)");
-            return;
-        }
-        selectWellsInZone(selectedZone);
-    });
-
-    // زر مسح التحديد
-    document.getElementById("clear-selection").addEventListener("click", clearSelection);
 </script>
 
 </body>
