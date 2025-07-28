@@ -1,16 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Leaflet Map - GeoJSON & JSON</title>
+    <title>Leaflet Map - Load GeoJSON from GitHub</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
     <style>
         #map { height: 100vh; width: 100%; }
     </style>
@@ -19,37 +15,54 @@
 
 <div id="map"></div>
 
-<script>
-    // إنشاء الخريطة وتحديد المركز
-    var map = L.map('map').setView([32.0, 35.0], 10); // عدّل الإحداثيات حسب منطقتك
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    // إضافة خريطة الأساس
+<script>
+    // إنشاء الخريطة وتحديد مركزها
+    var map = L.map('map').setView([32.0, 35.0], 10); // غيّر الإحداثيات حسب موقعك
+
+    // خريطة الأساس من OpenStreetMap
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap'
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
     }).addTo(map);
 
     // تحميل ملف ABC.geojson من GitHub
-    fetch('https://raw.githubusercontent.com/USERNAME/REPO/main/ABC.geojson')  // عدّل الرابط
+    fetch('https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/ABC.geojson')
         .then(response => response.json())
         .then(data => {
-            L.geoJSON(data, {
+            var abcLayer = L.geoJSON(data, {
                 onEachFeature: function (feature, layer) {
                     layer.bindPopup("ABC Feature");
                 }
             }).addTo(map);
-        });
+
+            // تكبير الخريطة لتناسب حدود البيانات
+            map.fitBounds(abcLayer.getBounds());
+        })
+        .catch(error => console.error('خطأ في تحميل ABC.geojson:', error));
 
     // تحميل ملف Wells.json من GitHub
-    fetch('https://raw.githubusercontent.com/USERNAME/REPO/main/Wells.json')  // عدّل الرابط
+    fetch('https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/Wells.json')
         .then(response => response.json())
         .then(data => {
             L.geoJSON(data, {
                 onEachFeature: function (feature, layer) {
-                    layer.bindPopup("Well: " + (feature.properties.name || 'No Name'));
+                    let name = feature.properties?.name || 'بدون اسم';
+                    layer.bindPopup("بئر: " + name);
+                },
+                pointToLayer: function(feature, latlng) {
+                    return L.circleMarker(latlng, {
+                        radius: 6,
+                        color: 'blue',
+                        fillColor: 'lightblue',
+                        fillOpacity: 0.7
+                    });
                 }
             }).addTo(map);
-        });
+        })
+        .catch(error => console.error('خطأ في تحميل Wells.json:', error));
 </script>
 
 </body>
