@@ -27,6 +27,9 @@
     <label for="zoneSelect">اختر المنطقة (Select Polygon):</label>
     <select id="zoneSelect">
         <option value="">-- اختر --</option>
+        <option value="A">المنطقة أ</option>
+        <option value="B">المنطقة ب</option>
+        <option value="C">المنطقة ج</option>
     </select>
 </div>
 
@@ -54,7 +57,6 @@
         .then(data => {
             abcData = data;
 
-            // إضافة الطبقة للمشاهدة
             polygonLayer = L.geoJSON(data, {
                 style: {
                     color: 'green',
@@ -62,23 +64,12 @@
                     fillOpacity: 0.1
                 },
                 onEachFeature: function (feature, layer) {
-                    const zone = feature.properties.zone || 'Unknown';
+                    const zone = feature.properties.zone || '؟';
                     layer.bindPopup("Zone: " + zone);
                 }
             }).addTo(map);
 
             map.fitBounds(polygonLayer.getBounds());
-
-            // تعبئة القائمة بالـ Zones الموجودة
-            const select = document.getElementById("zoneSelect");
-            const uniqueZones = [...new Set(data.features.map(f => f.properties.zone))];
-
-            uniqueZones.forEach(zone => {
-                const option = document.createElement("option");
-                option.value = zone;
-                option.text = "المنطقة " + zone;
-                select.appendChild(option);
-            });
         });
 
     // تحميل طبقة Wells.json
@@ -101,7 +92,7 @@
             return;
         }
 
-        // استخراج المضلع/المضلعات المختارة
+        // استخراج المضلعات التي zone=A/B/C
         const selectedPolygons = abcData.features.filter(f => f.properties.zone === selectedZone);
 
         selectedPolygonLayer = L.geoJSON({
@@ -111,7 +102,7 @@
             style: { color: "red", weight: 2, fillOpacity: 0.2 }
         }).addTo(map);
 
-        // إجراء Select By Location باستخدام turf.booleanPointInPolygon
+        // إيجاد الينابيع داخل هذه المضلعات
         const intersectedWells = wellsData.features.filter(well =>
             selectedPolygons.some(poly => turf.booleanPointInPolygon(well, poly))
         );
@@ -134,7 +125,7 @@
             }
         }).addTo(map);
 
-        // عرض المعلومات
+        // عرض عدد وأسماء الينابيع
         const infoBox = document.getElementById("info");
         infoBox.innerHTML = `<b>عدد الينابيع داخل المنطقة ${selectedZone}:</b> ${intersectedWells.length}<br><ul>` +
             intersectedWells.map(f => `<li>${f.properties.name || 'بئر'}</li>`).join('') + "</ul>";
