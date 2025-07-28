@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>خريطة Leaflet مع التحكم بالطبقات</title>
+    <title>خريطة Leaflet</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
@@ -23,36 +23,29 @@
     const map = L.map('map').setView([32.0, 35.0], 10);
 
     // طبقة الأساس
-    const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19
     }).addTo(map);
 
-    // تعريف الطبقات كـ متغيرات فارغة
-    let abcLayer, wellsLayer;
-
-    // تحميل طبقة ABC.geojson
+    // تحميل ملف ABC.geojson محليًا
     fetch('ABC.geojson')
         .then(response => response.json())
         .then(data => {
-            abcLayer = L.geoJSON(data, {
+            const abcLayer = L.geoJSON(data, {
                 onEachFeature: function(feature, layer) {
                     layer.bindPopup("عنصر من ABC");
                 }
-            });
-
-            abcLayer.addTo(map);
+            }).addTo(map);
             map.fitBounds(abcLayer.getBounds());
+        })
+        .catch(err => console.error("فشل في تحميل ABC.geojson:", err));
 
-            // بعد تحميل الطبقة، أضفها إلى التحكم بالطبقات
-            layersControl.addOverlay(abcLayer, "طبقة ABC");
-        });
-
-    // تحميل طبقة Wells.json
+    // تحميل ملف Wells.json محليًا
     fetch('Wells.json')
         .then(response => response.json())
         .then(data => {
-            wellsLayer = L.geoJSON(data, {
+            L.geoJSON(data, {
                 onEachFeature: function(feature, layer) {
                     const name = feature.properties?.name || "بئر بدون اسم";
                     layer.bindPopup(name);
@@ -60,3 +53,17 @@
                 pointToLayer: function(feature, latlng) {
                     return L.circleMarker(latlng, {
                         radius: 6,
+                        fillColor: "blue",
+                        color: "#000",
+                        weight: 1,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    });
+                }
+            }).addTo(map);
+        })
+        .catch(err => console.error("فشل في تحميل Wells.json:", err));
+</script>
+
+</body>
+</html>
