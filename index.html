@@ -13,6 +13,11 @@
             padding: 10px;
             background: #f9f9f9;
         }
+        #regionName {
+            margin-top: 5px;
+            font-weight: bold;
+            color: #444;
+        }
     </style>
 </head>
 <body>
@@ -27,6 +32,7 @@
         <option value="all">كل المناطق</option>
     </select>
     <div id="count"></div>
+    <div id="regionName"></div>
 </div>
 
 <div id="map"></div>
@@ -46,10 +52,11 @@
 
     let abcLayer;
     let wellsLayer;
+    let labelLayer;
     let allWellsData = null;
     let abcData = null;
 
-    // تحميل طبقة المناطق ABC
+    // تحميل طبقة المناطق
     fetch('ABC.geojson')
         .then(response => response.json())
         .then(data => {
@@ -64,50 +71,76 @@
         })
         .catch(err => console.error("فشل في تحميل ABC.geojson:", err));
 
-    // تحميل طبقة الينابيع فقط بدون عرضها
+    // تحميل طبقة الينابيع
     fetch('Wells.json')
         .then(response => response.json())
         .then(data => {
             allWellsData = data;
-            // لا يتم عرض النقاط عند البداية
+            // لا شيء عند البداية
         })
         .catch(err => console.error("فشل في تحميل Wells.json:", err));
 
-    // دالة عرض الينابيع حسب المنطقة
+    // دالة لتحديد لون حسب LandClassi
+    function getColorByLandClassi(value) {
+        switch (value) {
+            case "Agricultural": return "green";
+            case "Domestic": return "blue";
+            case "Industrial": return "red";
+            case "Mixed": return "orange";
+            default: return "gray";
+        }
+    }
+
+    // دالة لعرض الينابيع حسب المنطقة
     function displayWells(selectedZone) {
         if (!allWellsData || !abcData) return;
 
-        // إزالة الطبقة السابقة
-        if (wellsLayer) {
-            map.removeLayer(wellsLayer);
-        }
+        // حذف الطبقات القديمة
+        if (wellsLayer) map.removeLayer(wellsLayer);
+        if (labelLayer) map.removeLayer(labelLayer);
 
         let filtered = [];
 
         if (selectedZone === "all") {
             filtered = allWellsData.features;
+            document.getElementById("regionName").innerText = "كل المناطق";
         } else {
             const polygon = abcData.features.find(f => f.properties.zone === selectedZone);
-            if (polygon) {
-                const ptsWithin = turf.pointsWithinPolygon(allWellsData, polygon);
-                filtered = ptsWithin.features;
+            if (!polygon) {
+                alert("لم يتم العثور على مضلع للمنطقة: " + selectedZone);
+                return;
             }
+
+            const ptsWithin = turf.pointsWithinPolygon(allWellsData, polygon);
+            filtered = ptsWithin.features;
+
+            // عرض اسم المنطقة على الخريطة
+            const center = turf.centerOfMass(polygon).geometry.coordinates;
+            labelLayer = L.marker([center[1], center[0]], {
+                icon: L.divIcon({
+                    className: 'region-label',
+                    html: `<div style="font-size:16px; font-weight:bold; color:darkgreen;">المنطقة ${selectedZone}</div>`
+                })
+            }).addTo(map);
+
+            document.getElementById("regionName").innerText = `المنطقة المختارة: ${selectedZone}`;
         }
 
-        // إظهار عدد الينابيع
+        // عدد الينابيع
         document.getElementById("count").innerHTML = `عدد الينابيع: ${filtered.length}`;
 
-        // عرض الينابيع
+        // عرض النقاط
         wellsLayer = L.geoJSON({ type: "FeatureCollection", features: filtered }, {
             onEachFeature: function(feature, layer) {
-                const name = feature.properties?.name || "بئر بدون اسم";
+                const name = feature.properties?.name || "بئر غير مسمى";
                 const land = feature.properties?.LandClassi || "غير معروف";
                 layer.bindPopup(`<b>اسم البئر:</b> ${name}<br><b>LandClassi:</b> ${land}`);
             },
             pointToLayer: function(feature, latlng) {
+                const color = getColorByLandClassi(feature.properties?.LandClassi);
                 return L.circleMarker(latlng, {
                     radius: 6,
-                    fillColor: "blue",
+                    fillColor: color,
                     color: "#000",
                     weight: 1,
                     opacity: 1,
@@ -119,8 +152,7 @@
 
     // عند تغيير المنطقة
     document.getElementById("zoneSelect").addEventListener("change", function() {
-        const selectedZone = this.value;
-        displayWells(selectedZone);
+        displayWells(this.value);
     });
 </script>
 
