@@ -1,11 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>خريطة مواقع الينابيع حسب المناطق</title>
+  <title>خريطة الينابيع حسب المناطق</title>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <link rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
     #map { height: 90vh; width: 100vw; }
     #controls { padding: 10px; background: #f9f9f9; }
@@ -23,14 +22,6 @@
     <option value="C">المنطقة ج</option>
     <option value="all">كل المناطق</option>
   </select>
-  <label style="margin-left: 20px;">فلترة حسب LandClassi:</label>
-  <select id="landClassiSelect">
-    <option value="all">كل الأنواع</option>
-    <option value="Agricultural">زراعي</option>
-    <option value="Domestic">منزلي</option>
-    <option value="Industrial">صناعي</option>
-    <option value="Mixed">مختلط</option>
-  </select>
   <span id="count" style="margin-left:20px; font-weight:bold;"></span>
 </div>
 
@@ -38,6 +29,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+
 <script>
   const map = L.map('map').setView([32,35], 10);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -55,26 +47,23 @@
     allWellsData = data;
   });
 
-  const getColor = v => ({
-    Agricultural:'green', Domestic:'blue',
-    Industrial:'red', Mixed:'orange'
-  }[v] || 'gray');
-
   function display() {
     if (!abcData || !allWellsData) return;
+
     const zone = document.getElementById('zoneSelect').value;
-    const lc = document.getElementById('landClassiSelect').value;
 
     if (wellsLayer) map.removeLayer(wellsLayer);
     if (labelLayer) map.removeLayer(labelLayer);
 
     let features = allWellsData.features;
+
     if (zone && zone !== 'all') {
       const poly = abcData.features.find(f=>
         (f.properties.zone||'').toUpperCase() === zone.toUpperCase());
       if (poly) {
         features = turf.pointsWithinPolygon(
           {type:'FeatureCollection',features}, poly).features;
+
         const c = turf.centerOfMass(poly).geometry.coordinates;
         labelLayer = L.marker([c[1],c[0]], {
           icon: L.divIcon({
@@ -83,13 +72,11 @@
               font-weight:bold;color:darkgreen;">المنطقة ${zone}</div>`
           })
         }).addTo(map);
+
         map.fitBounds(L.geoJSON(poly).getBounds());
       } else {
         console.warn('لم يتم العثور على المضلع للمنطقة ',zone);
       }
-    }
-    if (lc && lc !== 'all') {
-      features = features.filter(f=>f.properties?.LandClassi === lc);
     }
 
     document.getElementById('count').textContent =
@@ -97,19 +84,17 @@
 
     wellsLayer = L.geoJSON({type:'FeatureCollection',features}, {
       pointToLayer:(f,latlng)=>L.circleMarker(latlng,{
-        radius:6, fillColor:getColor(f.properties?.LandClassi),
-        color:'#000', weight:1, fillOpacity:0.8
+        radius:6, fillColor:"blue", color:'#000',
+        weight:1, fillOpacity:0.8
       }),
       onEachFeature:(f,layer)=> {
         layer.bindPopup(
-          `<b>${f.properties?.name||'بئر'}<br>LandClassi: ${
-           f.properties?.LandClassi||'غير معروف'}</b>`);
+          `<b>${f.properties?.name||'بئر غير مسمى'}</b>`);
       }
     }).addTo(map);
   }
 
-  document.getElementById('zoneSelect').addEventListener('change',display);
-  document.getElementById('landClassiSelect').addEventListener('change',display);
+  document.getElementById('zoneSelect').addEventListener('change', display);
 </script>
 </body>
 </html>
