@@ -25,12 +25,15 @@
         <option value="B">المنطقة ب</option>
         <option value="C">المنطقة ج</option>
     </select>
+    <div id="count"></div>
 </div>
 
 <div id="map"></div>
 
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Turf.js -->
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
 
 <script>
     const map = L.map('map').setView([32.0, 35.0], 10);
@@ -43,14 +46,17 @@
     let abcLayer;
     let wellsLayer;
     let allWellsData = null;
+    let abcData = null;
 
     // تحميل طبقة ABC.geojson
     fetch('ABC.geojson')
         .then(response => response.json())
         .then(data => {
+            abcData = data; // تخزين البيانات لاستخدامها لاحقًا
             abcLayer = L.geoJSON(data, {
+                style: {color: 'green'},
                 onEachFeature: function(feature, layer) {
-                    layer.bindPopup("عنصر من ABC");
+                    layer.bindPopup("منطقة: " + feature.properties.zone);
                 }
             }).addTo(map);
             map.fitBounds(abcLayer.getBounds());
@@ -62,31 +68,40 @@
         .then(response => response.json())
         .then(data => {
             allWellsData = data;
-            displayWells("all"); // عرض كل الينابيع عند البداية
+            displayWells("all");
         })
         .catch(err => console.error("فشل في تحميل Wells.json:", err));
 
-    // دالة لعرض الينابيع بناء على المنطقة المحددة
-    function displayWells(zone) {
-        // حذف الطبقة السابقة إن وُجدت
+    // دالة لعرض الينابيع بناء على التقاطع مع المنطقة
+    function displayWells(selectedZone) {
         if (wellsLayer) {
             map.removeLayer(wellsLayer);
         }
 
-        // فلترة البيانات حسب المنطقة
-        const filtered = {
-            type: "FeatureCollection",
-            features: allWellsData.features.filter(feature => {
-                if (zone === "all") return true;
-                return feature.properties.zone === zone;
-            })
-        };
+        let filtered = [];
+
+        if (selectedZone === "all") {
+            filtered = allWellsData.features;
+        } else {
+            // استخراج المضلع المناسب من طبقة ABC
+            const polygon = abcData.features.find(f => f.properties.zone === selectedZone);
+
+            if (polygon) {
+                // استخدام turf لتحديد النقاط داخل هذا المضلع
+                const ptsWithin = turf.pointsWithinPolygon(allWellsData, polygon);
+                filtered = ptsWithin.features;
+            }
+        }
+
+        // عرض عدد الينابيع
+        document.getElementById("count").innerHTML = `عدد الينابيع: ${filtered.length}`;
 
         // عرض الطبقة الجديدة
-        wellsLayer = L.geoJSON(filtered, {
+        wellsLayer = L.geoJSON({type: "FeatureCollection", features: filtered}, {
             onEachFeature: function(feature, layer) {
                 const name = feature.properties?.name || "بئر بدون اسم";
-                layer.bindPopup("اسم البئر: " + name);
+                const land = feature.properties?.LandClassi || "غير معروف";
+                layer.bindPopup(`<b>اسم البئر:</b> ${name}<br><b>LandClassi:</b> ${land}`);
             },
             pointToLayer: function(feature, latlng) {
                 return L.circleMarker(latlng, {
@@ -101,10 +116,9 @@
         }).addTo(map);
     }
 
-    // التعامل مع تغيير المنطقة من القائمة
+    // التعامل مع تغيير المنطقة
     document.getElementById("zoneSelect").addEventListener("change", function() {
-        const selectedZone = this.value;
-        displayWells(selectedZone);
+        displayWells(this.value);
     });
 </script>
 
