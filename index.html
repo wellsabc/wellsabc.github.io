@@ -2,32 +2,14 @@
 <html lang="ar">
 <head>
   <meta charset="UTF-8" />
-  <title>خريطة الينابيع حسب المناطق مع حساب دقيق</title>
+  <title>خريطة الينابيع - بيانات حقيقية</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- Leaflet CSS -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    crossorigin=""
-  />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      direction: rtl;
-      margin: 0;
-      padding: 0;
-    }
-    #map {
-      height: 600px;
-      width: 100%;
-    }
-    #controls {
-      margin: 10px;
-    }
-    #info {
-      margin: 10px;
-      font-weight: bold;
-    }
+    body { font-family: Arial; direction: rtl; margin: 0; }
+    #map { height: 600px; width: 100%; }
+    #controls { padding: 10px; }
+    #info { padding: 10px; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -40,30 +22,20 @@
       <option value="C">منطقة ج</option>
     </select>
   </div>
-
   <div id="info">عدد الينابيع: 0</div>
-
   <div id="map"></div>
 
-  <!-- Leaflet JS -->
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    crossorigin=""
-  ></script>
-
-  <!-- Turf.js -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
   <script>
-    var map = L.map('map').setView([31.9, 35.2], 10);
+    const map = L.map('map').setView([31.9, 35.2], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '© OpenStreetMap'
-    }).addTo(map);
+    const markersLayer = L.layerGroup().addTo(map);
+    let wellsGeoJSON = null;
 
-    // مضلعات المناطق بصيغة GeoJSON
-    var areasGeoJSON = {
+    const areasGeoJSON = {
       A: {
         "type": "Feature",
         "geometry": {
@@ -105,87 +77,72 @@
       }
     };
 
-    // تحويل المضلعات إلى طبقات Leaflet
-    var areasLayers = {};
+    const areasLayers = {};
     for (const key in areasGeoJSON) {
       areasLayers[key] = L.geoJSON(areasGeoJSON[key], { color: 'blue' });
     }
 
-    // بيانات الينابيع
-    var wellsData = [
-      { name: "ينبوع 1", coords: [31.90, 35.15] },
-      { name: "ينبوع 2", coords: [31.88, 35.18] },
-      { name: "ينبوع 3", coords: [31.80, 35.35] },
-      { name: "ينبوع 4", coords: [31.78, 35.40] },
-      { name: "ينبوع 5", coords: [31.92, 35.45] },
-      { name: "ينبوع 6", coords: [31.90, 35.48] },
-      { name: "ينبوع 7", coords: [31.93, 35.25] },
-      { name: "ينبوع 8", coords: [31.87, 35.12] }
-    ];
-
-    var markersLayer = L.layerGroup().addTo(map);
-
-    // رسم كل الينابيع على الخريطة عند التحميل
     function showAllWells() {
       markersLayer.clearLayers();
-      wellsData.forEach(function(well) {
-        L.marker(well.coords)
-          .bindPopup("<b>" + well.name + "</b>")
-          .addTo(markersLayer);
-      });
-      document.getElementById('info').textContent = "عدد الينابيع: " + wellsData.length;
+      let features = wellsGeoJSON.features;
 
-      var group = new L.featureGroup(wellsData.map(w => L.marker(w.coords)));
-      map.fitBounds(group.getBounds().pad(0.2));
+      features.forEach(f => {
+        const coords = f.geometry.coordinates.reverse(); // lat, lng
+        const name = f.properties.name || "ينبوع";
+        L.marker(coords).bindPopup(`<b>${name}</b>`).addTo(markersLayer);
+      });
+
+      document.getElementById('info').textContent = "عدد الينابيع: " + features.length;
+
+      const bounds = L.geoJSON(wellsGeoJSON).getBounds();
+      map.fitBounds(bounds.pad(0.2));
     }
 
-    // فلترة الينابيع حسب المنطقة
-    function showWellsByArea(areaKey) {
+    function filterWellsByArea(areaKey) {
       markersLayer.clearLayers();
 
-      // إزالة المضلعات القديمة
       Object.values(areasLayers).forEach(layer => {
         if (map.hasLayer(layer)) map.removeLayer(layer);
       });
 
       if (!areaKey || !areasGeoJSON[areaKey]) {
-        showAllWells(); // لو لم يتم اختيار منطقة، نعرض كل النقاط
+        showAllWells();
         return;
       }
 
-      // عرض مضلع المنطقة
       areasLayers[areaKey].addTo(map);
-
-      var polygon = areasGeoJSON[areaKey];
-
-      // تصفية النقاط داخل المضلع باستخدام Turf
-      var filteredWells = wellsData.filter(function(well) {
-        var pt = turf.point([well.coords[1], well.coords[0]]);
+      const polygon = areasGeoJSON[areaKey];
+      const filtered = wellsGeoJSON.features.filter(f => {
+        const pt = turf.point(f.geometry.coordinates);
         return turf.booleanPointInPolygon(pt, polygon);
       });
 
-      // تحديث عدد الينابيع
-      document.getElementById('info').textContent = "عدد الينابيع: " + filteredWells.length;
+      document.getElementById('info').textContent = "عدد الينابيع: " + filtered.length;
 
-      filteredWells.forEach(function(well) {
-        L.marker(well.coords)
-          .bindPopup("<b>" + well.name + "</b>")
-          .addTo(markersLayer);
+      filtered.forEach(f => {
+        const coords = [...f.geometry.coordinates].reverse(); // lat, lng
+        const name = f.properties.name || "ينبوع";
+        L.marker(coords).bindPopup(`<b>${name}</b>`).addTo(markersLayer);
       });
 
-      if (filteredWells.length > 0) {
-        var group = new L.featureGroup(filteredWells.map(w => L.marker(w.coords)));
-        map.fitBounds(group.getBounds().pad(0.2));
+      if (filtered.length > 0) {
+        const bounds = L.geoJSON({ type: "FeatureCollection", features: filtered }).getBounds();
+        map.fitBounds(bounds.pad(0.2));
       }
     }
 
-    // عند تغيير المنطقة من القائمة
-    document.getElementById('areaSelect').addEventListener('change', function(e) {
-      showWellsByArea(e.target.value);
+    document.getElementById('areaSelect').addEventListener('change', e => {
+      filterWellsByArea(e.target.value);
     });
 
-    // عرض كل النقاط عند التحميل
-    showAllWells();
+    // تحميل ملف GeoJSON الحقيقي (يجب أن يكون في نفس المجلد أو مسار صحيح)
+    fetch('Wells.json')
+      .then(res => res.json())
+      .then(data => {
+        wellsGeoJSON = data;
+        showAllWells(); // عرض كل النقاط عند البداية
+      })
+      .catch(err => console.error("فشل تحميل ملف Wells.json:", err));
   </script>
 </body>
 </html>
