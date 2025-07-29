@@ -1,160 +1,115 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>خريطة Leaflet - فلترة الينابيع حسب المنطقة</title>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <style>
-        #map { height: 90vh; width: 100vw; }
-        #controls {
-            padding: 10px;
-            background: #f9f9f9;
-        }
-        #regionName {
-            margin-top: 5px;
-            font-weight: bold;
-            color: #444;
-        }
-    </style>
+  <title>خريطة مواقع الينابيع حسب المناطق</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    #map { height: 90vh; width: 100vw; }
+    #controls { padding: 10px; background: #f9f9f9; }
+    .region-label { pointer-events: none; }
+  </style>
 </head>
 <body>
 
 <div id="controls">
-    <label for="zoneSelect">اختر المنطقة:</label>
-    <select id="zoneSelect">
-        <option value="">-- اختر المنطقة --</option>
-        <option value="A">المنطقة أ</option>
-        <option value="B">المنطقة ب</option>
-        <option value="C">المنطقة ج</option>
-        <option value="all">كل المناطق</option>
-    </select>
-    <div id="count"></div>
-    <div id="regionName"></div>
+  <label>اختر المنطقة:</label>
+  <select id="zoneSelect">
+    <option value="">-- اختر المنطقة --</option>
+    <option value="A">المنطقة أ</option>
+    <option value="B">المنطقة ب</option>
+    <option value="C">المنطقة ج</option>
+    <option value="all">كل المناطق</option>
+  </select>
+  <label style="margin-left: 20px;">فلترة حسب LandClassi:</label>
+  <select id="landClassiSelect">
+    <option value="all">كل الأنواع</option>
+    <option value="Agricultural">زراعي</option>
+    <option value="Domestic">منزلي</option>
+    <option value="Industrial">صناعي</option>
+    <option value="Mixed">مختلط</option>
+  </select>
+  <span id="count" style="margin-left:20px; font-weight:bold;"></span>
 </div>
 
 <div id="map"></div>
 
-<!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<!-- Turf.js -->
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
-
 <script>
-    const map = L.map('map').setView([32.0, 35.0], 10);
+  const map = L.map('map').setView([32,35], 10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution:'© OpenStreetMap contributors'}).addTo(map);
 
-    const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 19
-    }).addTo(map);
+  let abcData, allWellsData, wellsLayer, labelLayer;
 
-    let abcLayer;
-    let wellsLayer;
-    let labelLayer;
-    let allWellsData = null;
-    let abcData = null;
+  fetch('ABC.geojson').then(r=>r.json()).then(data=>{
+    abcData = data;
+    L.geoJSON(data, { style:{color:'green'} }).addTo(map);
+    map.fitBounds(L.geoJSON(data).getBounds());
+  });
 
-    // تحميل طبقة المناطق
-    fetch('ABC.geojson')
-        .then(response => response.json())
-        .then(data => {
-            abcData = data;
-            abcLayer = L.geoJSON(data, {
-                style: { color: 'green' },
-                onEachFeature: function(feature, layer) {
-                    layer.bindPopup("منطقة: " + feature.properties.zone);
-                }
-            }).addTo(map);
-            map.fitBounds(abcLayer.getBounds());
-        })
-        .catch(err => console.error("فشل في تحميل ABC.geojson:", err));
+  fetch('Wells.json').then(r=>r.json()).then(data=>{
+    allWellsData = data;
+  });
 
-    // تحميل طبقة الينابيع
-    fetch('Wells.json')
-        .then(response => response.json())
-        .then(data => {
-            allWellsData = data;
-            // لا شيء عند البداية
-        })
-        .catch(err => console.error("فشل في تحميل Wells.json:", err));
+  const getColor = v => ({
+    Agricultural:'green', Domestic:'blue',
+    Industrial:'red', Mixed:'orange'
+  }[v] || 'gray');
 
-    // دالة لتحديد لون حسب LandClassi
-    function getColorByLandClassi(value) {
-        switch (value) {
-            case "Agricultural": return "green";
-            case "Domestic": return "blue";
-            case "Industrial": return "red";
-            case "Mixed": return "orange";
-            default: return "gray";
-        }
-    }
+  function display() {
+    if (!abcData || !allWellsData) return;
+    const zone = document.getElementById('zoneSelect').value;
+    const lc = document.getElementById('landClassiSelect').value;
 
-    // دالة لعرض الينابيع حسب المنطقة
-    function displayWells(selectedZone) {
-        if (!allWellsData || !abcData) return;
+    if (wellsLayer) map.removeLayer(wellsLayer);
+    if (labelLayer) map.removeLayer(labelLayer);
 
-        // حذف الطبقات القديمة
-        if (wellsLayer) map.removeLayer(wellsLayer);
-        if (labelLayer) map.removeLayer(labelLayer);
-
-        let filtered = [];
-
-        if (selectedZone === "all") {
-            filtered = allWellsData.features;
-            document.getElementById("regionName").innerText = "كل المناطق";
-        } else {
-            const polygon = abcData.features.find(f => f.properties.zone === selectedZone);
-            if (!polygon) {
-                alert("لم يتم العثور على مضلع للمنطقة: " + selectedZone);
-                return;
-            }
-
-            const ptsWithin = turf.pointsWithinPolygon(allWellsData, polygon);
-            filtered = ptsWithin.features;
-
-            // عرض اسم المنطقة على الخريطة
-            const center = turf.centerOfMass(polygon).geometry.coordinates;
-            labelLayer = L.marker([center[1], center[0]], {
-                icon: L.divIcon({
-                    className: 'region-label',
-                    html: `<div style="font-size:16px; font-weight:bold; color:darkgreen;">المنطقة ${selectedZone}</div>`
-                })
-            }).addTo(map);
-
-            document.getElementById("regionName").innerText = `المنطقة المختارة: ${selectedZone}`;
-        }
-
-        // عدد الينابيع
-        document.getElementById("count").innerHTML = `عدد الينابيع: ${filtered.length}`;
-
-        // عرض النقاط
-        wellsLayer = L.geoJSON({ type: "FeatureCollection", features: filtered }, {
-            onEachFeature: function(feature, layer) {
-                const name = feature.properties?.name || "بئر غير مسمى";
-                const land = feature.properties?.LandClassi || "غير معروف";
-                layer.bindPopup(`<b>اسم البئر:</b> ${name}<br><b>LandClassi:</b> ${land}`);
-            },
-            pointToLayer: function(feature, latlng) {
-                const color = getColorByLandClassi(feature.properties?.LandClassi);
-                return L.circleMarker(latlng, {
-                    radius: 6,
-                    fillColor: color,
-                    color: "#000",
-                    weight: 1,
-                    opacity: 1,
-                    fillOpacity: 0.8
-                });
-            }
+    let features = allWellsData.features;
+    if (zone && zone !== 'all') {
+      const poly = abcData.features.find(f=>
+        (f.properties.zone||'').toUpperCase() === zone.toUpperCase());
+      if (poly) {
+        features = turf.pointsWithinPolygon(
+          {type:'FeatureCollection',features}, poly).features;
+        const c = turf.centerOfMass(poly).geometry.coordinates;
+        labelLayer = L.marker([c[1],c[0]], {
+          icon: L.divIcon({
+            className:'region-label',
+            html:`<div style="font-size:18px;
+              font-weight:bold;color:darkgreen;">المنطقة ${zone}</div>`
+          })
         }).addTo(map);
+        map.fitBounds(L.geoJSON(poly).getBounds());
+      } else {
+        console.warn('لم يتم العثور على المضلع للمنطقة ',zone);
+      }
+    }
+    if (lc && lc !== 'all') {
+      features = features.filter(f=>f.properties?.LandClassi === lc);
     }
 
-    // عند تغيير المنطقة
-    document.getElementById("zoneSelect").addEventListener("change", function() {
-        displayWells(this.value);
-    });
-</script>
+    document.getElementById('count').textContent =
+      `عدد الينابيع: ${features.length}`;
 
+    wellsLayer = L.geoJSON({type:'FeatureCollection',features}, {
+      pointToLayer:(f,latlng)=>L.circleMarker(latlng,{
+        radius:6, fillColor:getColor(f.properties?.LandClassi),
+        color:'#000', weight:1, fillOpacity:0.8
+      }),
+      onEachFeature:(f,layer)=> {
+        layer.bindPopup(
+          `<b>${f.properties?.name||'بئر'}<br>LandClassi: ${
+           f.properties?.LandClassi||'غير معروف'}</b>`);
+      }
+    }).addTo(map);
+  }
+
+  document.getElementById('zoneSelect').addEventListener('change',display);
+  document.getElementById('landClassiSelect').addEventListener('change',display);
+</script>
 </body>
 </html>
