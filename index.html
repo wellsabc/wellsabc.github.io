@@ -51,7 +51,7 @@
     crossorigin=""
   ></script>
 
-  <!-- إضافة مكتبة Turf.js -->
+  <!-- Turf.js -->
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
   <script>
@@ -62,7 +62,7 @@
       attribution: '© OpenStreetMap'
     }).addTo(map);
 
-    // تعريف المضلعات كمجموعات من النقاط GeoJSON format
+    // مضلعات المناطق بصيغة GeoJSON
     var areasGeoJSON = {
       A: {
         "type": "Feature",
@@ -108,10 +108,10 @@
     // تحويل المضلعات إلى طبقات Leaflet
     var areasLayers = {};
     for (const key in areasGeoJSON) {
-      areasLayers[key] = L.geoJSON(areasGeoJSON[key], {color: 'blue'} );
+      areasLayers[key] = L.geoJSON(areasGeoJSON[key], { color: 'blue' });
     }
 
-    // بيانات الينابيع (نقاط فقط)
+    // بيانات الينابيع
     var wellsData = [
       { name: "ينبوع 1", coords: [31.90, 35.15] },
       { name: "ينبوع 2", coords: [31.88, 35.18] },
@@ -119,40 +119,54 @@
       { name: "ينبوع 4", coords: [31.78, 35.40] },
       { name: "ينبوع 5", coords: [31.92, 35.45] },
       { name: "ينبوع 6", coords: [31.90, 35.48] },
-      { name: "ينبوع 7", coords: [31.93, 35.25] }, // إضافة ينابيع إضافية لتجربة
+      { name: "ينبوع 7", coords: [31.93, 35.25] },
       { name: "ينبوع 8", coords: [31.87, 35.12] }
     ];
 
     var markersLayer = L.layerGroup().addTo(map);
 
+    // رسم كل الينابيع على الخريطة عند التحميل
+    function showAllWells() {
+      markersLayer.clearLayers();
+      wellsData.forEach(function(well) {
+        L.marker(well.coords)
+          .bindPopup("<b>" + well.name + "</b>")
+          .addTo(markersLayer);
+      });
+      document.getElementById('info').textContent = "عدد الينابيع: " + wellsData.length;
+
+      var group = new L.featureGroup(wellsData.map(w => L.marker(w.coords)));
+      map.fitBounds(group.getBounds().pad(0.2));
+    }
+
+    // فلترة الينابيع حسب المنطقة
     function showWellsByArea(areaKey) {
       markersLayer.clearLayers();
 
-      // إزالة المضلعات القديمة من الخريطة
+      // إزالة المضلعات القديمة
       Object.values(areasLayers).forEach(layer => {
         if (map.hasLayer(layer)) map.removeLayer(layer);
       });
 
       if (!areaKey || !areasGeoJSON[areaKey]) {
-        document.getElementById('info').textContent = "عدد الينابيع: 0";
+        showAllWells(); // لو لم يتم اختيار منطقة، نعرض كل النقاط
         return;
       }
 
-      // إضافة مضلع المنطقة
+      // عرض مضلع المنطقة
       areasLayers[areaKey].addTo(map);
 
-      var polygon = areasGeoJSON[areaKey]; // GeoJSON polygon
+      var polygon = areasGeoJSON[areaKey];
 
-      // تصفية الينابيع التي تقع داخل المضلع باستخدام Turf.js
+      // تصفية النقاط داخل المضلع باستخدام Turf
       var filteredWells = wellsData.filter(function(well) {
-        var pt = turf.point([well.coords[1], well.coords[0]]); // [lng, lat]
+        var pt = turf.point([well.coords[1], well.coords[0]]);
         return turf.booleanPointInPolygon(pt, polygon);
       });
 
       // تحديث عدد الينابيع
       document.getElementById('info').textContent = "عدد الينابيع: " + filteredWells.length;
 
-      // إضافة العلامات على الخريطة
       filteredWells.forEach(function(well) {
         L.marker(well.coords)
           .bindPopup("<b>" + well.name + "</b>")
@@ -165,9 +179,13 @@
       }
     }
 
+    // عند تغيير المنطقة من القائمة
     document.getElementById('areaSelect').addEventListener('change', function(e) {
       showWellsByArea(e.target.value);
     });
+
+    // عرض كل النقاط عند التحميل
+    showAllWells();
   </script>
 </body>
 </html>
