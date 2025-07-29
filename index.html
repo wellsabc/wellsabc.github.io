@@ -1,11 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>خريطة Leaflet - فلترة الينابيع حسب المنطقة</title>
+    <title>خريطة Leaflet - فلترة الينابيع حسب المنطقة ونوع الاستخدام</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         #map { height: 90vh; width: 100vw; }
@@ -31,15 +29,23 @@
         <option value="C">المنطقة ج</option>
         <option value="all">كل المناطق</option>
     </select>
+
+    <label for="landClassiSelect" style="margin-right: 15px;">اختر نوع الاستخدام:</label>
+    <select id="landClassiSelect">
+        <option value="all">كل الأنواع</option>
+        <option value="Agricultural">زراعي</option>
+        <option value="Domestic">منزلي</option>
+        <option value="Industrial">صناعي</option>
+        <option value="Mixed">مختلط</option>
+    </select>
+
     <div id="count"></div>
     <div id="regionName"></div>
 </div>
 
 <div id="map"></div>
 
-<!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<!-- Turf.js -->
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
 
 <script>
@@ -50,13 +56,11 @@
         maxZoom: 19
     }).addTo(map);
 
-    let abcLayer;
-    let wellsLayer;
-    let labelLayer;
+    let abcLayer, wellsLayer, labelLayer;
     let allWellsData = null;
     let abcData = null;
 
-    // تحميل طبقة المناطق
+    // تحميل المناطق
     fetch('ABC.geojson')
         .then(response => response.json())
         .then(data => {
@@ -68,19 +72,15 @@
                 }
             }).addTo(map);
             map.fitBounds(abcLayer.getBounds());
-        })
-        .catch(err => console.error("فشل في تحميل ABC.geojson:", err));
+        });
 
-    // تحميل طبقة الينابيع
+    // تحميل الينابيع
     fetch('Wells.json')
         .then(response => response.json())
         .then(data => {
             allWellsData = data;
-            // لا شيء عند البداية
-        })
-        .catch(err => console.error("فشل في تحميل Wells.json:", err));
+        });
 
-    // دالة لتحديد لون حسب LandClassi
     function getColorByLandClassi(value) {
         switch (value) {
             case "Agricultural": return "green";
@@ -91,30 +91,27 @@
         }
     }
 
-    // دالة لعرض الينابيع حسب المنطقة
-    function displayWells(selectedZone) {
+    function displayWells() {
         if (!allWellsData || !abcData) return;
 
-        // حذف الطبقات القديمة
+        const selectedZone = document.getElementById("zoneSelect").value;
+        const selectedLandClassi = document.getElementById("landClassiSelect").value;
+
         if (wellsLayer) map.removeLayer(wellsLayer);
         if (labelLayer) map.removeLayer(labelLayer);
 
         let filtered = [];
 
+        // فلترة حسب المنطقة
         if (selectedZone === "all") {
             filtered = allWellsData.features;
-            document.getElementById("regionName").innerText = "كل المناطق";
         } else {
             const polygon = abcData.features.find(f => f.properties.zone === selectedZone);
-            if (!polygon) {
-                alert("لم يتم العثور على مضلع للمنطقة: " + selectedZone);
-                return;
-            }
-
+            if (!polygon) return;
             const ptsWithin = turf.pointsWithinPolygon(allWellsData, polygon);
             filtered = ptsWithin.features;
 
-            // عرض اسم المنطقة على الخريطة
+            // اسم المنطقة
             const center = turf.centerOfMass(polygon).geometry.coordinates;
             labelLayer = L.marker([center[1], center[0]], {
                 icon: L.divIcon({
@@ -126,7 +123,11 @@
             document.getElementById("regionName").innerText = `المنطقة المختارة: ${selectedZone}`;
         }
 
-        // عدد الينابيع
+        // فلترة حسب نوع LandClassi
+        if (selectedLandClassi !== "all") {
+            filtered = filtered.filter(f => f.properties?.LandClassi === selectedLandClassi);
+        }
+
         document.getElementById("count").innerHTML = `عدد الينابيع: ${filtered.length}`;
 
         // عرض النقاط
@@ -150,10 +151,9 @@
         }).addTo(map);
     }
 
-    // عند تغيير المنطقة
-    document.getElementById("zoneSelect").addEventListener("change", function() {
-        displayWells(this.value);
-    });
+    // الاستماع لتغيّر كلا القائمتين
+    document.getElementById("zoneSelect").addEventListener("change", displayWells);
+    document.getElementById("landClassiSelect").addEventListener("change", displayWells);
 </script>
 
 </body>
