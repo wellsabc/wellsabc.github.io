@@ -1,142 +1,100 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html>
 <head>
-  <meta charset="UTF-8" />
   <title>خريطة الينابيع حسب المناطق</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- رابط Leaflet CSS -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-sA+e2QjqK5y1qLmbKXvH5d0CVb6Y4R+Ogs0o5uWo/kM="
-    crossorigin=""
-  />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      direction: rtl;
-      margin: 0;
-      padding: 0;
-    }
-    #map {
-      height: 600px;
-      width: 100%;
-    }
-    #controls {
-      margin: 10px;
-    }
-    #info {
-      margin: 10px;
-      font-weight: bold;
-    }
+    #map { height: 90vh; width: 100vw; }
+    #controls { padding: 10px; background: #f9f9f9; }
+    .region-label { pointer-events: none; }
   </style>
 </head>
 <body>
-  <div id="controls">
-    <label for="areaSelect">اختر المنطقة:</label>
-    <select id="areaSelect">
-      <option value="">-- اختر --</option>
-      <option value="A">منطقة أ</option>
-      <option value="B">منطقة ب</option>
-      <option value="C">منطقة ج</option>
-    </select>
-  </div>
 
-  <div id="info">عدد الينابيع: 0</div>
+<div id="controls">
+  <label>اختر المنطقة:</label>
+  <select id="zoneSelect">
+    <option value="">-- اختر المنطقة --</option>
+    <option value="A">المنطقة أ</option>
+    <option value="B">المنطقة ب</option>
+    <option value="C">المنطقة ج</option>
+    <option value="all">كل المناطق</option>
+  </select>
+  <span id="count" style="margin-left:20px; font-weight:bold;"></span>
+</div>
 
-  <div id="map"></div>
+<div id="map"></div>
 
-  <!-- رابط Leaflet JS -->
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-o9N1j6kC4TdRtiu7hpWc8PmEBya1FoRYxwYnHMYlCZo="
-    crossorigin=""
-  ></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
 
-  <script>
-    // إنشاء الخريطة مركزة على موقع افتراضي
-    var map = L.map('map').setView([31.9, 35.2], 10);
+<script>
+  const map = L.map('map').setView([32,35], 10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution:'© OpenStreetMap contributors'}).addTo(map);
 
-    // إضافة طبقة الخريطة الأساسية
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '© OpenStreetMap'
-    }).addTo(map);
+  let abcData, allWellsData, wellsLayer, labelLayer;
 
-    // بيانات المناطق (مثال: مضلعات لكل منطقة)
-    var areas = {
-      A: L.polygon([
-        [31.95, 35.1],
-        [31.95, 35.3],
-        [31.85, 35.3],
-        [31.85, 35.1]
-      ]),
-      B: L.polygon([
-        [31.85, 35.3],
-        [31.85, 35.5],
-        [31.75, 35.5],
-        [31.75, 35.3]
-      ]),
-      C: L.polygon([
-        [31.95, 35.3],
-        [31.95, 35.5],
-        [31.85, 35.5],
-        [31.85, 35.3]
-      ])
-    };
+  fetch('ABC.geojson').then(r=>r.json()).then(data=>{
+    abcData = data;
+    L.geoJSON(data, { style:{color:'green'} }).addTo(map);
+    map.fitBounds(L.geoJSON(data).getBounds());
+  });
 
-    // بيانات الينابيع: كل ينبوع يحتوي على موقع ونوع المنطقة التي ينتمي إليها
-    var wellsData = [
-      { name: "ينبوع 1", coords: [31.90, 35.15], area: "A" },
-      { name: "ينبوع 2", coords: [31.88, 35.18], area: "A" },
-      { name: "ينبوع 3", coords: [31.80, 35.35], area: "B" },
-      { name: "ينبوع 4", coords: [31.78, 35.40], area: "B" },
-      { name: "ينبوع 5", coords: [31.92, 35.45], area: "C" },
-      { name: "ينبوع 6", coords: [31.90, 35.48], area: "C" }
-    ];
+  fetch('Wells.json').then(r=>r.json()).then(data=>{
+    allWellsData = data;
+  });
 
-    var markersLayer = L.layerGroup().addTo(map);
+  function display() {
+    if (!abcData || !allWellsData) return;
 
-    function showWellsByArea(areaKey) {
-      markersLayer.clearLayers();
+    const zone = document.getElementById('zoneSelect').value;
 
-      if (!areaKey || !areas[areaKey]) {
-        document.getElementById('info').textContent = "عدد الينابيع: 0";
-        return;
+    if (wellsLayer) map.removeLayer(wellsLayer);
+    if (labelLayer) map.removeLayer(labelLayer);
+
+    let features = allWellsData.features;
+
+    if (zone && zone !== 'all') {
+      const poly = abcData.features.find(f=>
+        (f.properties.zone||'').toUpperCase() === zone.toUpperCase());
+      if (poly) {
+        features = turf.pointsWithinPolygon(
+          {type:'FeatureCollection',features}, poly).features;
+
+        const c = turf.centerOfMass(poly).geometry.coordinates;
+        labelLayer = L.marker([c[1],c[0]], {
+          icon: L.divIcon({
+            className:'region-label',
+            html:`<div style="font-size:18px;
+              font-weight:bold;color:darkgreen;">المنطقة ${zone}</div>`
+          })
+        }).addTo(map);
+
+        map.fitBounds(L.geoJSON(poly).getBounds());
+      } else {
+        console.warn('لم يتم العثور على المضلع للمنطقة ',zone);
       }
-
-      // إضافة مضلع المنطقة للخريطة (اختياري لتوضيح المنطقة)
-      // أولاً إزالة جميع المضلعات القديمة
-      Object.values(areas).forEach(function(polygon) {
-        map.removeLayer(polygon);
-      });
-      areas[areaKey].addTo(map);
-
-      // تصفية الينابيع حسب المنطقة
-      var filteredWells = wellsData.filter(function(well) {
-        return well.area === areaKey;
-      });
-
-      // إضافة علامات الينابيع للخريطة مع نافذة منبثقة باسم الينبوع
-      filteredWells.forEach(function(well) {
-        L.marker(well.coords)
-          .bindPopup("<b>" + well.name + "</b><br>المنطقة: " + well.area)
-          .addTo(markersLayer);
-      });
-
-      // تحديث النص بعدد الينابيع
-      document.getElementById('info').textContent = "عدد الينابيع: " + filteredWells.length;
-
-      // ضبط الخريطة لتناسب المضلعات والينابيع
-      var group = new L.featureGroup(filteredWells.map(w => L.marker(w.coords)));
-      map.fitBounds(group.getBounds().pad(0.2));
     }
 
-    // التعامل مع تغيير القائمة المنسدلة
-    document.getElementById('areaSelect').addEventListener('change', function(e) {
-      var selectedArea = e.target.value;
-      showWellsByArea(selectedArea);
-    });
-  </script>
+    document.getElementById('count').textContent =
+      `عدد الينابيع: ${features.length}`;
+
+    wellsLayer = L.geoJSON({type:'FeatureCollection',features}, {
+      pointToLayer:(f,latlng)=>L.circleMarker(latlng,{
+        radius:6, fillColor:"blue", color:'#000',
+        weight:1, fillOpacity:0.8
+      }),
+      onEachFeature:(f,layer)=> {
+        layer.bindPopup(
+          `<b>${f.properties?.name||'بئر غير مسمى'}</b>`);
+      }
+    }).addTo(map);
+  }
+
+  document.getElementById('zoneSelect').addEventListener('change', display);
+</script>
 </body>
 </html>
